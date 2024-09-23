@@ -8,11 +8,14 @@ import { formatUrl } from '@aws-sdk/util-format-url';
 
 const UNAUTHORIZED = 'Unauthorized';
 
-const notFound = () =>
-    ({
+const notFound = (message: string) => {
+    console.log('NOTFOUND', message);
+
+    return {
         statusCode: 404,
-        body: 'Not found',
-    } as const);
+        body: `Not found ${message}`,
+    } as const;
+};
 
 const env = (key: string) => {
     const value = process.env[key];
@@ -36,10 +39,13 @@ function assertTeamToken(token: unknown): asserts token is TeamToken {
 
 const authenticate = (authorization: string) => {
     try {
+        console.log('authorizing', authorization);
         const token = verify(authorization.replace('Bearer ', ''), env('JWT_SECRET'));
+        console.log(token);
         assertTeamToken(token);
         return token;
-    } catch {
+    } catch (e) {
+        console.log('intermediary error', e);
         throw new Error(UNAUTHORIZED);
     }
 };
@@ -67,43 +73,53 @@ const generatePresignedUrl = async (
     return formatUrl(signedUrlObject);
 };
 
-export const lambdaHandler = async (event: any): Promise<APIGatewayProxyResult> => {
+export const lambdaHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+    console.log(event);
     const {
-        rawPath,
-        rawQueryString,
-        requestContext: {
-            http: { method: httpMethod },
-        },
+        path,
+        queryStringParameters,
+        httpMethod,
         headers: {
-            authorization = '',
+            Authorization = '',
             'access-control-request-method': requestMethod,
             'x-forwarded-proto': protocol,
             host: host,
         },
     } = event;
 
-    const location = new URL(`${protocol}://${host}${rawPath}${rawQueryString ? `?${rawQueryString}` : ''}`);
+    const location = new URL(`${protocol}://${host}${path}`);
 
-    if (!location.pathname.startsWith('/v8/artifacts')) return notFound();
+    for (const [key, value] of Object.entries(queryStringParameters || {})) {
+        if (value !== undefined) {
+            location.searchParams.append(key, value);
+        }
+    }
+
+    if (!location.pathname.startsWith('/v8/artifacts')) return notFound('url does not start with /v8/artifacts');
 
     switch (`${httpMethod}:${location.pathname}`) {
         case 'GET:/v8/artifacts/status':
+            console.log('STATUS ROUTE');
             return {
                 statusCode: 200,
                 body: '{"enabled":true}',
             };
         case 'POST:/v8/artifacts/events':
+            console.log('EVENTS ROUTE');
             return {
                 statusCode: 200,
                 body: '{}',
             };
         default:
             try {
+                console.log('HTTP METHOD', httpMethod, 'REQUEST METHOD', requestMethod, 'LOCATION', location.pathname);
                 const [, , , hash] = location.pathname.split('/');
-                if (!hash || httpMethod !== 'OPTIONS') return notFound();
-                const { teamId } = authenticate(authorization);
+                if (!hash || httpMethod !== 'OPTIONS')
+                    return notFound(`hash (${hash}) unknown or method (${httpMethod}) not OPTIONS`);
+                const { teamId } = authenticate(Authorization);
                 const Key = `${teamId}/${hash}`;
                 if (requestMethod === 'GET' || requestMethod === 'PUT') {
+                    console.log('RETURNING presigned url');
                     return {
                         statusCode: 200,
                         headers: {
@@ -118,8 +134,9 @@ export const lambdaHandler = async (event: any): Promise<APIGatewayProxyResult> 
                         body: '',
                     } as const;
                 }
-                return notFound();
+                return notFound('other');
             } catch (e: any) {
+                console.log('GOT AN ERROR', e);
                 if (e.message !== UNAUTHORIZED) throw e;
                 return {
                     statusCode: 401,
