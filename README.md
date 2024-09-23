@@ -40,6 +40,7 @@
 - `pnpm tbuild`, optionally with `--verbosity=2` or higher
     - This will fail with the error down below
     - When downgrading turbo, it will start to work starting in version 1.13.3. It does not work in 1.13.4.
+- **Remember to run `sam delete` when you're done**
 
 ## Error:
 ```
