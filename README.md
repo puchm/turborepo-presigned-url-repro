@@ -1,3 +1,58 @@
+# [Original repository](https://github.com/EloB/turborepo-remote-cache-lambdagit )
+
+# Explanation
+- Install (SAM)[https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html]
+- Set up AWS account and credentials
+- Create S3 Bucket
+    - Bucket policy (quite permissive, but good enough for debugging): 
+```
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "lambda.amazonaws.com"
+        },
+        "Action": "s3:*",
+        "Resource": [
+          "arn:aws:s3:::YOUR_BUCKET_NAME",
+          "arn:aws:s3:::YOUR_BUCKET_NAME/*"
+        ]
+      }
+    ]
+  }
+```
+
+- Create JWT, e.g. on https://jwt.io/ as detailed below
+    - Note that the `team_` is mandatory and the part after should only contain alphanumeric characters and underscores
+- `npm --prefix=function install`
+- Run `sam build`
+- Run `sam deploy --guided`
+    - Region must be same as where Bucket is located
+    - JWT secret is the secret used to create the JWT, not the JWT itself
+    - S3Bucket is only the name of the bucket, without the protocol or anything
+- Set up environment
+    - `TURBO_TOKEN` must be set to JWT created before
+    - `.turbo/config.json` as detailed below, the API URL is in the output of `sam deploy`
+- Navigate into `app` folder
+- `pnpm install` / `npm install` / or other
+- `pnpm tbuild`, optionally with `--verbosity=2` or higher
+    - This will fail with the error down below
+    - When downgrading turbo, it will start to work starting in version 1.13.3. It does not work in 1.13.4.
+
+## Error:
+```
+WARNING  failed to contact remote cache: Error making HTTP request: HTTP status server error (501 Not Implemented) for url [presigned url]
+```
+
+
+---
+---
+---
+
+# Original Readme down below
+
 # Self hosted Turborepo Remote Cache Lambda
 Using Turborepo preflight requests combined with Lambda and S3 to generate presigned URLs which allows files larger than 6MB.
 
